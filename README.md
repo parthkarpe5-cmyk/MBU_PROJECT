@@ -1,3 +1,19 @@
+# Driver Monitoring System — Browser and Windows editions
+
+The browser edition is now implemented in `web/`. It runs camera analysis on the user's device, with no Python server or frame upload.
+
+## Website / Vercel
+
+From the repository root, run `npm ci`, then `npm run dev` for local development or `npm run build` for a production build in root `dist/`.
+
+For Vercel, keep **Root Directory `./`**, **Preset Vite**, **Build `npm run build`**, **Output `dist`**, and **Install `npm ci`**. No environment variables are required. The root package.json and vercel.json now support this configuration. Deploy the latest main commit; the earlier Python-only commit cannot build a website.
+
+See [browser setup and deployment](web/README.md) and [browser validation](web/VALIDATION.md). Seven-expression recognition and trained driver-state inference are unavailable in the browser edition; the current monitor uses geometric measurements and temporal rules.
+
+The Python application and research pipeline below remain available separately.
+
+---
+
 # Driver Monitoring System — Windows webcam MVP
 
 A local Python desktop lab with a live camera on the left and monitoring dashboard on the right. No video, images, landmark coordinates, or calibration data are saved or uploaded. Camera frames live in memory. Setup downloads packages and the official Google model; running the app needs no network connection.

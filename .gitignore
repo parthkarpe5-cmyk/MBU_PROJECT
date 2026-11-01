@@ -17,3 +17,11 @@ models/learned/
 *.m4v
 *.pt
 *.ckpt
+
+# Browser build outputs and tooling
+node_modules/
+dist/
+test-results/
+playwright-report/
+research_upgrade/
+*.zip

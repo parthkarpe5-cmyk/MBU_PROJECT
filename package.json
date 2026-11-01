@@ -1,0 +1,12 @@
+{
+  "name": "mbu-driver-monitor",
+  "private": true,
+  "type": "module",
+  "workspaces": ["web"],
+  "engines": { "node": "24.x" },
+  "scripts": {
+    "dev": "npm run dev --workspace web",
+    "build": "node scripts/build.mjs",
+    "test": "node --test web/tests/*.test.js"
+  }
+}
