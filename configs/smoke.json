@@ -1,0 +1,10 @@
+{
+  "_comment": "SYNTHETIC smoke fixture only. Short windows so 12 s fake videos yield windows. Results are meaningless.",
+  "seed": 1337,
+  "dataset": {"name": "SYNTHETIC-SMOKE"},
+  "extraction": {"target_fps": 10.0},
+  "features": {"window_seconds": 6.0, "stride_seconds": 2.0, "bin_seconds": 1.0},
+  "baseline": {"window_seconds_grid": [6.0], "C_grid": [0.1, 1.0]},
+  "gru": {"window_seconds": 6.0, "hidden_grid": [8], "max_epochs": 3, "patience": 2},
+  "evaluation": {"bootstrap_samples": 100, "latency_windows": 40}
+}

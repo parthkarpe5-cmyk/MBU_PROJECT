@@ -1,0 +1,5 @@
+mediapipe>=0.10.30,<2
+opencv-contrib-python>=4.11,<6
+numpy>=2,<3
+Pillow>=11,<14
+pytest>=8,<10

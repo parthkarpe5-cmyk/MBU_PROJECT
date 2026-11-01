@@ -1,0 +1,9 @@
+{
+  "_comment": "Merged over research/config.py DEFAULTS. Set dataset.layout_regex and dataset.label_source after running `inspect`; see DATASET.md.",
+  "seed": 1337,
+  "dataset": {
+    "layout_regex": null,
+    "label_source": null
+  },
+  "splits": {"train_folds": [1, 2, 3], "val_folds": [4], "test_folds": [5]}
+}

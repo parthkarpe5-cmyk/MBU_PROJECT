@@ -1,0 +1,19 @@
+.venv/
+__pycache__/
+.pytest_cache/
+.test-temp*/
+models/*
+!models/.gitkeep
+
+# Research pipeline: raw dataset videos and derived artifacts stay local/private
+data/
+datasets/
+artifacts/
+models/learned/
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.m4v
+*.pt
+*.ckpt
