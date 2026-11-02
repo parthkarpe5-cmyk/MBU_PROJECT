@@ -28,3 +28,24 @@ const wasm=wasmCandidates.find(p=>existsSync(p));
 if(!wasm) throw new Error('MediaPipe WASM assets missing. Run npm install at the repository root.');
 await cp(wasm,path.join(web,'public/wasm'),{recursive:true});
 console.log('Verified face model and copied matching MediaPipe WASM assets.');
+
+const ortDir=path.join(web,'../node_modules/onnxruntime-web/dist');
+await mkdir(path.join(web,'public/ort'),{recursive:true});
+for(const file of ['ort-wasm-simd-threaded.wasm','ort-wasm-simd-threaded.mjs']) {
+  await copyFile(path.join(ortDir,file),path.join(web,'public/ort',file));
+}
+const expression=path.join(modelDir,'emotion-ferplus-8.onnx');
+const expressionSha='a2a2ba6a335a3b29c21acb6272f962bd3d47f84952aaffa03b60986e04efa61c';
+if(!existsSync(expression) || hash(await readFile(expression))!==expressionSha) {
+  const local=path.join(web,'../models/emotion-ferplus-8.onnx');
+  let bytes;
+  if(existsSync(local)) bytes=await readFile(local);
+  else {
+    const response=await fetch('https://media.githubusercontent.com/media/onnx/models/main/validated/vision/body_analysis/emotion_ferplus/model/emotion-ferplus-8.onnx',{signal:AbortSignal.timeout(120000)});
+    if(!response.ok) throw new Error('FER+ download failed: '+response.status);
+    bytes=Buffer.from(await response.arrayBuffer());
+  }
+  if(hash(bytes)!==expressionSha) throw new Error('FER+ checksum mismatch');
+  await writeFile(expression,bytes);
+}
+console.log('Verified FER+ CNN and copied local ONNX Runtime assets.');

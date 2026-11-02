@@ -14,6 +14,13 @@ def test_dashboard_renders_and_marks_stale(monkeypatch):
     try:
         ui = app.App(root, Namespace())
         ui.thread.join(timeout=1)
+        for mode, count in [('Camera only', 1), ('Dashboard only', 1), ('Split', 2)]:
+            ui.view.set(mode)
+            ui.set_view()
+            assert len(ui.panes.panes()) == count
+        ui.sound_mapping['distraction'].set('availability')
+        ui.send_sound_mapping()
+        assert ui.commands.get_nowait() == ('sound_mapping', {'distraction': 'availability', 'fatigue': 'fatigue', 'availability': 'availability'})
         packet = dict(frame=np.zeros((480, 640, 3), dtype=np.uint8),
                       values=(.3, .3, .1, 0, 0), data={'roll': 0, 'quality': 'Synthetic test'},
                       state={'state': 'MONITORING', 'alerts': [], 'durations': {}},

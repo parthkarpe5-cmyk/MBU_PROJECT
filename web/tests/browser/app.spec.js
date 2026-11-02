@@ -6,7 +6,7 @@ test('loads without webcam permission and adapts to a mobile viewport',async({pa
   await page.exposeFunction('cameraCalled',()=>cameraCalls++);
   await page.addInitScript(()=>{const original=navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);navigator.mediaDevices.getUserMedia=(...args)=>{window.cameraCalled();return original(...args);};});
   await page.goto('/');
-  await expect(page.getByRole('heading',{name:'Driver Monitor',exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'DriveGuard AI',exact:true})).toBeVisible();
   await expect(page.getByRole('button',{name:'Start camera',exact:true})).toBeEnabled();
   await expect(page.locator('#status')).toHaveText('OFFLINE');
   expect(cameraCalls).toBe(0);
@@ -28,7 +28,7 @@ test('real MediaPipe loads; fake webcam stops and restarts without leaking track
   page.on('pageerror',e=>errors.push(e.message));
   await page.goto('/');await page.locator('#start').click();
   await expect(page.locator('#cameraState')).toContainText('LIVE',{timeout:60000});
-  await expect(page.locator('#status')).toHaveText('UNAVAILABLE',{timeout:30000}); // fake camera has no face
+  await expect(page.locator('#status')).toHaveText('FACE NOT DETECTED',{timeout:30000}); // fake camera has no face
   await expect(page.locator('#message')).not.toHaveClass(/error/);
   await page.evaluate(()=>{window.testTracks=[...document.querySelector('#video').srcObject.getTracks()];});
   await page.locator('#stop').click();
@@ -64,6 +64,25 @@ test('real face fixture produces geometry and completes calibration',async({page
   await page.locator('#calibrate').click();
   await expect(page.locator('#calibrationTag')).toHaveText('CALIBRATED',{timeout:15000});
   await expect(page.locator('#calibrationInfo')).toContainText('Calibrated for this session');
+  await expect(page.locator('#modelState')).toContainText('FER+ CNN ready',{timeout:60000});
+  await expect(page.locator('#expressionValue')).not.toHaveText('Unavailable',{timeout:30000});
   await page.screenshot({path:testInfo.outputPath('dashboard.png'),fullPage:true});
   await page.locator('#stop').click();
+});
+
+test('workspace views, resizing, sound assignments and light theme work without a camera',async({page},testInfo)=>{
+  await page.goto('/');
+  await page.getByRole('button',{name:'Camera only',exact:true}).click();
+  await expect(page.getByLabel('Monitoring dashboard')).toBeHidden();
+  await page.getByRole('button',{name:'Dashboard only',exact:true}).click();
+  await expect(page.getByLabel('Webcam and overlays')).toBeHidden();
+  await expect(page.getByLabel('Monitoring dashboard')).toBeVisible();
+  await page.getByRole('button',{name:'Split view',exact:true}).click();
+  await page.locator('#splitSize').fill('55');
+  await expect(page.locator('.layout')).toHaveAttribute('style',/55%/);
+  await page.getByText('Alert sounds & previews',{exact:true}).click();
+  await page.locator('#sound-distraction').selectOption('availability');
+  await page.locator('[data-preview=distraction]').click();
+  expect(await page.evaluate(()=>getComputedStyle(document.documentElement).colorScheme)).toBe('light');
+  await page.screenshot({path:testInfo.outputPath('driveguard-light.png'),fullPage:true});
 });

@@ -1,3 +1,22 @@
+# Capstone validation — 2 November 2026
+
+Current branch: `feat/driveguard-capstone`, audited from main `a053155`.
+
+- Full Python regression suite: **62 passed, 1 skipped**, 53.85 seconds. The skipped test requires optional PyTorch. Includes research split/leakage safeguards, hidden Tk rendering and view switching, fake camera failure/cleanup, gaze geometry, calibration, freshness/temporal fusion, distinct PCM sounds, CNN preprocessing and actual FER+ plus MediaPipe inference on scikit-image's public-domain astronaut image.
+- Actual Python model smoke: astronaut fixture produced the `happiness` label and finite softmax score. One observed inference took 235.4 ms. This is a single static fixture and a single timing observation, not accuracy or sustained-FPS evaluation.
+- Browser unit suite: **13 passed**. Production build passed. Browser integration checks and screenshot review are recorded in `web/VALIDATION.md`.
+- FER+ model byte count and upstream SHA-256 verified. Model weights, camera fixtures and generated assets are excluded from Git. Historical lock cleaned to avoid overlapping OpenCV distributions; `requirements-test.txt` installs the research-test dependencies without requiring optional Torch.
+- A restricted-process run hit a Windows invalid native handle while constructing MediaPipe. The full suite passed when run outside that restriction. The earlier run without research dependencies failed until scikit-learn was installed. These failures were not treated as successful checks.
+- A Windows GitHub Actions workflow now runs Python, build and browser fixture checks. Remote CI results will be visible on the PR; local results do not establish that CI has passed.
+
+**No actual webcam validation was performed.** Browser media inputs were fake or canvas-backed static images; native camera tests used mocks. Physical camera access/release, glasses and occlusion scenarios, speaker audibility, sustained performance, false-positive/false-negative rates across participants and lighting remain manual acceptance work. Native Tk was smoke-tested in a hidden window; the polished browser layout was screenshot-reviewed. No deployed Vercel URL was validated.
+
+See `CAPSTONE_AUDIT.md` for conservative visibility semantics and model limitations. Do not report safety/accident-prevention effectiveness from these tests.
+
+---
+
+## Historical validation records (before this branch)
+
 # Build-session validation — 31 October 2026
 
 Environment inspected: empty Windows workspace; Python 3.13.15 x64 and Tk 8.6. A project-local `.venv` was created. Its ensurepip step failed, so host pip's `--python .venv` support installed the dependencies. Network downloads needed elevated execution permission in this environment. The official Google version 1 Face Landmarker model was downloaded to `models/face_landmarker.task` (3,758,596 bytes).

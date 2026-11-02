@@ -25,3 +25,6 @@ test-results/
 playwright-report/
 research_upgrade/
 *.zip
+
+.test-face.png
+web/public/ort/

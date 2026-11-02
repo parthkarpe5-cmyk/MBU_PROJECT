@@ -1,3 +1,17 @@
+# DriveGuard AI browser validation — 2 November 2026
+
+- **13 unit tests passed**: geometry/timers plus iris gaze, conservative visibility statuses, fusion timing and priority, freshness, CNN score decoding, and expression-only alarm suppression.
+- **Production build passed** with locally served MediaPipe, FER+ and ONNX Runtime WASM assets. Both model digests were checked.
+- **5 Playwright integration tests passed** using headless Edge, fake browser camera or scikit-image's public-domain astronaut image rendered to a canvas stream: initial permission-free load and mobile fit; denied-camera retry; actual MediaPipe startup and camera track cleanup/restart; actual FER+ inference and face/pose/gaze calibration; workspace views, split resizing, sound mapping/preview interaction and light theme.
+- The calibrated fixture screenshot was visually inspected: mesh and measurement overlays, iris gaze, CNN label/score, six metric cards, fusion status, calibration, sound/threshold sections and light surfaces render without clipping. The fixture showed `happiness`, forward-range gaze and no sustained alerts. It is not ground-truth driver evaluation.
+- Sound tests verify distinct synthesis patterns and controls, not actual speaker audibility. Fullscreen support is implemented with the browser API; physical display/window behavior remains a manual check.
+
+**No human webcam was opened.** The tests do not establish detection accuracy, reliable obstruction identification, real-world latency/FPS, real speaker output or fitness for driving. A trained driver-behavior model remains unavailable in this browser edition. No remote deployment was checked.
+
+---
+
+## Historical validation (before this branch)
+
 # Browser edition validation — 1 November 2026
 
 Environment: Windows x64, Node 24.13.1, npm 11.13.0, Vite 8.3.5, MediaPipe Tasks Vision 1.2.0. npm lockfile is committed. npm installation reported zero vulnerabilities at the time of the build.

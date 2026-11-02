@@ -15,7 +15,7 @@ class Cam:
     def set(self, *a): pass
     def read(self):
         self.reads += 1
-        return (True, np.zeros((480, 640, 3), np.uint8)) if self.reads <= 5 else (False, None)
+        return (True, np.tile(np.arange(640, dtype=np.uint8)[None, :, None], (480, 1, 3))) if self.reads <= 5 else (False, None)
     def release(self): Cam.released = True
 
 

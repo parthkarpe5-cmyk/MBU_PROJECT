@@ -1,0 +1,4 @@
+-r requirements.txt
+scikit-learn>=1.4,<2
+scikit-image>=0.25,<1
+# Optional GRU tests skip unless torch is installed; see requirements-research.txt.

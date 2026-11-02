@@ -1,4 +1,8 @@
-# Driver Monitoring System — Browser and Windows editions
+# DriveGuard AI — Capstone upgrade
+
+See [CAPSTONE_AUDIT.md](CAPSTONE_AUDIT.md) for the audited requirements, model provenance, fusion rules, limitations and validation evidence. Both editions now include FER+ facial expression inference, separate calibrated iris gaze, conservative visibility statuses, temporal fusion, three configurable sound patterns and light workspace views.
+
+Windows: run `setup.cmd` once, then `run.cmd`. Browser: `npm ci`, then `npm run dev`.
 
 The browser edition is now implemented in `web/`. It runs camera analysis on the user's device, with no Python server or frame upload.
 
@@ -8,7 +12,7 @@ From the repository root, run `npm ci`, then `npm run dev` for local development
 
 For Vercel, keep **Root Directory `./`**, **Preset Vite**, **Build `npm run build`**, **Output `dist`**, and **Install `npm ci`**. No environment variables are required. The root package.json and vercel.json now support this configuration. Deploy the latest main commit; the earlier Python-only commit cannot build a website.
 
-See [browser setup and deployment](web/README.md) and [browser validation](web/VALIDATION.md). Seven-expression recognition and trained driver-state inference are unavailable in the browser edition; the current monitor uses geometric measurements and temporal rules.
+See [browser setup and deployment](web/README.md) and [browser validation](web/VALIDATION.md). The browser includes the eight-class FER+ expression CNN. A trained driver-behavior model remains unavailable in the browser; the optional Python research bundle is separate.
 
 The Python application and research pipeline below remain available separately.
 
@@ -51,22 +55,21 @@ EAR = average of two vertical eye distances divided by horizontal width. Both ey
 
 Timers use monotonic wall time. Lost face, low framing/light quality, nonfinite readings, calibration, or gaps over 0.75 s break alert continuity. Results older than 1.5 s are marked stale. Very low FPS can therefore suppress sustained alerts rather than invent continuity. Health checks require over 95% of landmark points inside the image, face width over 15%, and mean image brightness between 35 and 235. These are transparent heuristics, not validated confidence scores. The API's configured detection/presence/tracking minima are 0.6; it does not expose per-frame confidence in this implementation.
 
-Mouth opening is only a **yawn proxy**, and prolonged closure is only an observable cue. Talking, laughing, glare, glasses, occlusion, extreme pose, and poor light can cause false positives or missing detections. Head orientation does not establish gaze, attention, or driving ability. No gaze, phone-use, seatbelt, identity, or medical diagnosis is claimed. This is a research MVP, not a validated vehicle safety system. Do not test while driving.
+Mouth opening is only a **yawn proxy**, and prolonged closure is only an observable cue. Talking, laughing, glare, glasses, occlusion, extreme pose, and poor light can cause false positives or missing detections. Head orientation and iris gaze are separate approximate cues; neither establishes attention or driving ability. No phone-use, seatbelt, identity, or medical diagnosis is claimed. This is a research MVP, not a validated vehicle safety system. Do not test while driving.
 
-## Optional pretrained expression CNN
+## Facial expression CNN
 
-Disabled by default; no expression weights are bundled or silently downloaded. Supply a pretrained ONNX facial-expression CNN whose documented contract is **NCHW float32 `[1,1,48,48]`, grayscale face crop scaled to `[0,1]`, output one logit per class**. Supply an ordered JSON array of class-name strings from that model's documentation. Models using different normalization, RGB, dimensions, alignment, or output probabilities require an adapter in `dms/expression.py`; arbitrary ONNX weights are not interchangeable. Verify licensing and provenance yourself.
+`setup.cmd` explicitly downloads Google's landmark model and the MIT-licensed ONNX Model Zoo **FER+ opset 8** CNN. No downloads occur during Windows monitoring. FER+ accepts NCHW float32 `[1,1,64,64]` grayscale face crops in the **0–255 range**, with logits in the documented order: neutral, happiness, surprise, sadness, anger, disgust, fear, contempt. It is enabled by default when the weights are present; missing or invalid weights leave geometry monitoring available. CNN scores are uncalibrated, not emotion certainty or fatigue evidence.
 
-```powershell
-.\run.cmd --expression-model models\expression.onnx --expression-labels models\labels.json
-```
+Run `python setup_expression.py` separately to obtain the verified weights. Custom weights must match the selected contract. For the previous 48px normalized interface, pass `--expression-contract legacy48 --expression-model models/custom.onnx --expression-labels models/labels.json`.
 
-Enable **Expression CNN** in the window. The CNN runs every tenth processed frame on the clean face crop. Its softmax score is uncalibrated and does not affect alerts. No actual pretrained expression model has been tested here.
+Calibrate while looking forward to enable the independent iris gaze proxy. Both visible, open eyes must provide at least 30 samples. Camera-only, dashboard-only and resizable split views are available; F11 enters/exits fullscreen and Escape exits. Header controls remain available in every view. Enable Sound, select event-to-pattern assignments in the dashboard and use Preview. The third event means monitoring is unavailable for at least two continuous seconds.
 
 ## Verification
 
 ```powershell
-.venv\Scripts\python.exe -m pytest -q
+python -m pip --python .venv install -r requirements-test.txt
+.venv\Scripts\python.exe -m pytest -q --basetemp .test-temp-local
 ```
 
 Tests exercise camera-independent geometry, the research pipeline on synthetic caches, learned-model fallback and live/offline feature parity,, blink filtering, sustained closure, one-eye handling, missing data and timing gaps, nonfinite observations, yawn event counts, head-away timing, and calibration success/failure. See `VALIDATION.md` for actual checks from the build session.
@@ -81,7 +84,7 @@ Uses the current [official MediaPipe Python Face Landmarker API](https://develop
 
 ## Learned driver-state model (research prototype, optional)
 
-Separate from the heuristic monitor. Observed eye/mouth/head events (EAR/MAR/pose alerts) stay exactly as before; a *learned* model may additionally output a window-level class score (`alert` / `low_vigilance` / `drowsy`) trained on UTA-RLDD **video-level** labels. It is never an alarm, never changes heuristic alerts or sound, and facial expression is not used as fatigue evidence.
+Separate from the heuristic monitor. Observed eye/mouth/head events (EAR/MAR/pose alerts) stay exactly as before; a *learned* model may additionally output a window-level class score (`alert` / `low_vigilance` / `drowsy`) trained on UTA-RLDD **video-level** labels. It is supporting research context in fusion, never creates an alarm alone, and facial expression is not used as fatigue evidence.
 
 **No trained weights ship with this repository and none have been trained yet** (see `VALIDATION.md`). Without `models/learned/bundle.json` the app prints "Not active" in a *Learned model* panel and runs heuristics unchanged.
 

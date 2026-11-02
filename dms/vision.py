@@ -44,12 +44,19 @@ class Tracker:
             return None
         height, width = frame.shape[:2]
         points = np.array([(p.x * width, p.y * height, p.z * width) for p in result.face_landmarks[0]])
-        yaw, pitch, roll, axes = head_pose(points, width, height)
+        if len(points) < 468 or not np.isfinite(points).all():
+            return None
+        try:
+            yaw, pitch, roll, axes = head_pose(points, width, height)
+        except (ValueError, cv2.error):
+            # An unreliable pose must not terminate the camera or become a zero angle.
+            yaw = pitch = roll = float('nan')
+            axes = np.tile(points[1, :2], (3, 1))
         left, right, mar = measurements(points)
         inside = np.mean((points[:, 0] >= 0) & (points[:, 0] < width) & (points[:, 1] >= 0) & (points[:, 1] < height))
         size = np.ptp(points[:, 0]) / width
         light = float(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY).mean())
-        healthy = inside > .95 and size > .15 and 35 < light < 235
+        healthy = inside > .95 and size > .15 and 35 < light < 235 and np.isfinite((left, right, mar, yaw, pitch)).all()
         return dict(points=points, values=(left, right, mar, yaw, pitch), roll=roll, axes=axes,
                     healthy=healthy, quality=f"In frame {inside:.0%} | face width {size:.0%} | brightness {light:.0f}")
 
