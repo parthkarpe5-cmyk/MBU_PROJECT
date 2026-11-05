@@ -47,15 +47,22 @@ All sounds use the Web Audio API, with no audio files or network requests:
 - Monitoring unavailable: one quieter 520 Hz sine tone lasting 0.4 s.
 
 Each note has 15 ms fade-in and fade-out. The master volume slider defaults to
-50%; its maximum linear master gain is capped at 0.12. The unavailable tone uses
+70%; its maximum linear master gain is capped at 0.30 (raised from 0.12). Existing
+saved volume choices are preserved. The unavailable tone uses
 35% of the other patterns' envelope level. These are synthesis settings, not
 measured acoustic levels; device and system volume still determine loudness.
-Volume persists with the other local preferences and resets to 50%.
+Volume persists with the other local preferences and resets to 70%.
 
-Mappings show friendly option names while keeping existing saved choices. The
-three-second per-event cooldown, per-event Mute, and global Sound toggle remain.
-Previews bypass global Sound and cooldown, but respect a muted mapping and master
-volume. Oscillators and envelope nodes disconnect after playback. Physical speaker
+Mappings show friendly option names while keeping existing saved choices. An
+eligible alert repeats its full pattern until it clears or changes; there is no
+three-second pause between repeats. Fatigue retains priority over distraction.
+Returning to normal, muting, zero volume, calibration or stopping monitoring
+cancels the loop and fades pending/current notes to silence within 15 ms.
+Stale-camera availability alerts also repeat until the view recovers or monitoring
+stops. The existing availability delay and detection thresholds are unchanged.
+Previews play once, even with global Sound off, and respect a muted mapping and
+master volume; an active alert resumes afterward. Oscillators and envelope nodes
+disconnect after playback, and loop timers are cleared on stop. Physical speaker
 audibility has not been tested; no alarm-standard compliance is claimed.
 
 ## Run locally

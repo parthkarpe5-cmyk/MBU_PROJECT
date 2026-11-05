@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {PATTERNS,FADE_SECONDS,MAX_MASTER_GAIN,canPlay,clampVolume,createMasterGain,setMasterVolume,synthesize} from '../src/sounds.js';
+import {PATTERNS,FADE_SECONDS,MAX_MASTER_GAIN,DEFAULT_VOLUME,RepeatingAlert,canPlay,clampVolume,createMasterGain,setMasterVolume,synthesize} from '../src/sounds.js';
 import {defaultPreferences,validatePreferences} from '../src/preferences.js';
 
 function fakeContext(){
@@ -48,11 +48,11 @@ test('every note fades in/out for 15 ms and ends at zero; volume has a fixed cap
     }
     setMasterVolume(context,master,-10);assert.deepEqual(master.gain.calls.at(-1),['target',0,10,.015]);
   }
-  assert.equal(clampVolume(NaN),50);assert.equal(clampVolume(Infinity),50);assert.equal(clampVolume(101),100);
+  assert.equal(clampVolume(NaN),DEFAULT_VOLUME);assert.equal(clampVolume(Infinity),DEFAULT_VOLUME);assert.equal(clampVolume(101),100);
 });
-test('cooldown and global mute gate alerts; previews bypass them but never bypass a muted mapping',()=>{
+test('active alerts have no repeat cooldown; global mute, zero volume and muted mappings remain silent',()=>{
   const request={state:'running',enabled:true,pattern:'fatigue',now:10,last:8};
-  assert.equal(canPlay(request),false);assert.equal(canPlay({...request,last:7}),true);
+  assert.equal(canPlay(request),true);assert.equal(canPlay({...request,last:7}),true);
   assert.equal(canPlay({...request,last:7,enabled:false}),false);
   assert.equal(canPlay({...request,enabled:false,preview:true}),true);
   assert.equal(canPlay({...request,pattern:'Mute',preview:true}),false);
@@ -61,7 +61,31 @@ test('cooldown and global mute gate alerts; previews bypass them but never bypas
   assert.equal(canPlay({...request,now:NaN,preview:true}),false);
 });
 test('old saved preferences gain default volume; saved volume clamps and reset defaults remain moderate',()=>{
-  const old={...defaultPreferences(),masterVolume:undefined};assert.equal(validatePreferences(old).masterVolume,50);
+  const old={...defaultPreferences(),masterVolume:undefined};assert.equal(validatePreferences(old).masterVolume,DEFAULT_VOLUME);
   assert.equal(validatePreferences({...old,masterVolume:500}).masterVolume,100);
   assert.equal(validatePreferences({...old,masterVolume:-1}).masterVolume,0);
+});
+test('active patterns repeat without restarting on each frame, switch cleanly, and stop cancels queued notes',()=>{
+  const context=fakeContext(),master=createMasterGain(context);let nextId=0;
+  const timers=new Map();
+  const player=new RepeatingAlert(context,master,(callback,delay)=>{timers.set(++nextId,{callback,delay});return nextId;},id=>timers.delete(id));
+  player.set('fatigue');assert.equal(context.nodes.filter(node=>node.frequency).length,2);
+  const timer=timers.get(1);near(timer.delay,850);
+  player.set('fatigue');assert.equal(timers.size,1);assert.equal(context.nodes.filter(node=>node.frequency).length,2);
+  timers.delete(1);context.currentTime+=.85;timer.callback();
+  assert.equal(context.nodes.filter(node=>node.frequency).length,4);assert.equal(timers.size,1);
+  player.set('distraction');assert.equal(context.nodes.filter(node=>node.frequency).length,6);assert.equal(timers.size,1);
+  const active=context.nodes.filter(node=>node.frequency).slice(-2);
+  player.set(null);assert.equal(timers.size,0);assert.equal(player.pattern,null);
+  for(const oscillator of active){near(oscillator.stopped,context.currentTime+.015);assert.equal(oscillator.target.gain.calls.at(-1)[1],0);}
+  player.stop();player.set('Mute');assert.equal(timers.size,0);
+});
+test('stopping a pattern fades current and not-yet-started voices with no leftover scheduled sound',()=>{
+  const context=fakeContext(),master=createMasterGain(context);const playback=synthesize(context,master,'fatigue');
+  context.currentTime=10.1;playback.stop();
+  const oscillators=context.nodes.filter(node=>node.frequency);
+  for(const oscillator of oscillators)near(oscillator.stopped,10.115);
+  assert.deepEqual(oscillators[0].target.gain.calls.slice(-3),[['cancel',10.1],['set',1,10.1],['ramp',0,10.115]]);
+  assert.deepEqual(oscillators[1].target.gain.calls.slice(-3),[['cancel',10.1],['set',0,10.1],['ramp',0,10.115]]);
+  assert.ok(MAX_MASTER_GAIN>.12);assert.equal(DEFAULT_VOLUME,70);
 });

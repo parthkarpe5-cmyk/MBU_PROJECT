@@ -1,3 +1,20 @@
+# Louder repeating alerts — 5 November 2026
+
+- 28 Node tests passed. Repeating-pattern tests cover no restart on each camera
+  frame, changing alert types, cancelling loop timers and future notes, faded
+  silence, mute and zero-volume gating. Maximum master gain is now 0.30 and the
+  default is 70%; previously saved volume choices remain intact.
+- All 14 browser tests passed. The new real-Web-Audio/canvas-camera case verifies
+  repeated availability tones, mute/unmute, silence when a normal face returns,
+  repetition when tracking is lost again, and no further tones after Stop with
+  camera tracks ended. Existing camera, models, reports and preferences tests pass.
+- Production build passed. Preview patterns remain single-shot. Browser alert
+  repetition intentionally supersedes the previous three-second repeat cooldown.
+- No human camera or physical speaker audibility was tested. These are software
+  execution checks, not measured sound levels or alarm-standard validation.
+
+---
+
 # Synthesized sound redesign — 5 November 2026
 
 - 26 Node tests passed, including exact oscillator waveforms, frequency ramps,

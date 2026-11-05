@@ -6,7 +6,7 @@ import {ExpressionCNN} from './expression.js';
 import {SessionSummary, serializeReport} from './session.js';
 import {defaultPreferences, loadPreferences, savePreferences, resetPreferences} from './preferences.js';
 import {friendlyError} from './errors.js';
-import {createMasterGain,setMasterVolume,canPlay,synthesize} from './sounds.js';
+import {DEFAULT_VOLUME,createMasterGain,setMasterVolume,canPlay,synthesize,RepeatingAlert} from './sounds.js';
 
 const fields = [['ear','EAR below',.01],['mar','MAR above',.01],['eyeSeconds','Eye closure · seconds',.1],['mouthSeconds','Mouth opening · seconds',.1],['poseSeconds','Head away · seconds',.1],['yaw','Yaw limit · degrees',1],['pitch','Pitch limit · degrees',1]];
 const switches = [['mesh','Face mesh',false],['landmarks','Eye & mouth points',true],['iris','Iris',true],['lines','Measurement lines',true],['axes','Pose axes',true],['ids','Point IDs',false],['mirror','Mirror preview',true],['sound','Sound',false],['debug','Debug',false],['expression','Emotion CNN',true]];
@@ -37,7 +37,7 @@ document.querySelector('#app').innerHTML=`
     <dl id="summaryValues" class="summary-values"></dl><p id="summaryAlerts" class="explanation"></p>
     <p class="explanation">Alert counts are separate sustained events, not sound repeats. Blinks are brief observed closures (60–450 ms); mouth-open events are yawn proxies. Processing time excludes asynchronous expression inference and camera/display latency. Reports contain aggregate numbers only and are saved only when you click Save report.</p>
   </section>
-  <details class="panel settings"><summary>Alert sounds & previews</summary><div class="soundgrid">${['distraction','fatigue','availability'].map(event=>`<div class="soundrow"><label for="sound-${event}">${event==='availability'?'Monitoring unavailable':event==='fatigue'?'Fatigue cues':'Distraction cues'}</label><select id="sound-${event}">${Object.entries(PATTERNS).map(([key,pattern])=>`<option value="${key}" ${key===event?'selected':''}>${pattern.label}</option>`).join('')}<option value="Mute">Mute</option></select><button data-preview="${event}">Preview</button></div>`).join('')}<label class="volume-control" for="masterVolume">Master volume <input id="masterVolume" type="range" min="0" max="100" step="1" value="50"><output id="volumeValue" for="masterVolume">50%</output></label><p>Volume is limited in the app; loudness still depends on your device. Enable Sound for alerts. Previews play the selected tone even when Sound is off; Mute and zero volume remain silent. Availability sounds after 2 seconds. Events repeat at most every 3 seconds.</p></div></details>
+  <details class="panel settings"><summary>Alert sounds & previews</summary><div class="soundgrid">${['distraction','fatigue','availability'].map(event=>`<div class="soundrow"><label for="sound-${event}">${event==='availability'?'Monitoring unavailable':event==='fatigue'?'Fatigue cues':'Distraction cues'}</label><select id="sound-${event}">${Object.entries(PATTERNS).map(([key,pattern])=>`<option value="${key}" ${key===event?'selected':''}>${pattern.label}</option>`).join('')}<option value="Mute">Mute</option></select><button data-preview="${event}">Preview</button></div>`).join('')}<label class="volume-control" for="masterVolume">Master volume <input id="masterVolume" type="range" min="0" max="100" step="1" value="${DEFAULT_VOLUME}"><output id="volumeValue" for="masterVolume">${DEFAULT_VOLUME}%</output></label><p>Volume is limited in the app; loudness still depends on your device. Enable Sound for alerts. The selected pattern repeats until the alert clears or changes. Mute, zero volume, calibration and Stop silence alerts. Availability starts after 2 seconds without a clear view. Previews play once, even when Sound is off, then resume any active alert.</p></div></details>
   <details class="panel settings"><summary>Thresholds & timing</summary><form id="settings" class="settingsinner">${fields.map(([key,label,step])=>`<div class="field"><label for="setting-${key}">${label}</label><input id="setting-${key}" name="${key}" type="number" min="${step}" step="${step}" value="${DEFAULTS[key]}" required></div>`).join('')}<div class="settingsfooter"><button type="submit">Apply settings</button><button id="resetSettings" type="button">Reset to defaults</button><p>Preferences stay in this browser. Calibration baselines and session reports are not automatically saved.</p></div></form></details>
   <details class="panel settings" id="debugPanel" hidden><summary>Why did the monitor report this?</summary><pre id="debugText" class="debug">No observations.</pre></details>
   <details class="panel settings" id="about"><summary>About / Limitations</summary><div class="explanation">DriveGuard AI is a research prototype, not a safety or automotive system. Frames are processed locally; no video is recorded or uploaded. Facial expressions are context only and never trigger an alert alone. Accuracy has not been validated across people. Measurements and alert counts describe observed cues, not diagnoses. Preferences are stored in this browser; aggregate reports are saved only when requested.</div></details>
@@ -52,10 +52,10 @@ const lightCtx=lightCanvas.getContext('2d',{willReadFrequently:true});
 let monitor=new Monitor(), calibration=new Calibration(), fusion=new Fusion();
 let cnn=null,cnnLoading=false,cnnBusy=false,cnnTask=null,expressionCue=null,lastExpression=-Infinity,observationEpoch=0;
 let gazeBaseline=null,gazeSamples=[],currentGaze=null,currentHealth='MONITORING';
-const soundTimes={};
 let stream=null, detector=null, running=false, loading=false, generation=0, raf=0;
 let previousVideo=-1, lastFrameAt=0, lastProcessAt=0, previousFpsAt=0, lastBeep=-Infinity, fps=0, audio=null, stalled=false;
 let masterGain=null;
+let alertPlayer=null,activeSound=null,previewPlayback=null,previewTimer=null;
 let runtimeLabel='';
 let retryKind=null;
 function clearRetry(){retryKind=null;$('retry').hidden=true;}
@@ -103,16 +103,25 @@ async function cameras() {
     if(devices.some(d=>d.deviceId===selected)) $('camera').value=selected;
   } catch { /* Enumeration is optional; default camera can still work. */ }
 }
-function ensureAudio(){audio??=new(window.AudioContext||window.webkitAudioContext)();masterGain??=createMasterGain(audio,Number($('masterVolume').value));}
-function updateVolume(){const volume=Number($('masterVolume').value);$('volumeValue').textContent=volume+'%';$('masterVolume').setAttribute('aria-valuetext',volume+'%');if(audio&&masterGain)setMasterVolume(audio,masterGain,volume);}
+function ensureAudio(){audio??=new(window.AudioContext||window.webkitAudioContext)();masterGain??=createMasterGain(audio,Number($('masterVolume').value));alertPlayer??=new RepeatingAlert(audio,masterGain);}
+function stopPreview(){if(previewTimer!==null)clearTimeout(previewTimer);previewTimer=null;previewPlayback?.stop();previewPlayback=null;}
+function syncAlertSound(){
+  if(!alertPlayer)return;
+  const pattern=activeSound?$('sound-'+activeSound).value:null;
+  const allowed=running&&!previewPlayback&&canPlay({state:audio.state,enabled:$('sound').checked,pattern,now:performance.now()/1000,volume:Number($('masterVolume').value)});
+  alertPlayer.set(allowed?pattern:null);
+}
+function updateAlertSound(event){activeSound=event;syncAlertSound();}
+function updateVolume(){const volume=Number($('masterVolume').value);$('volumeValue').textContent=volume+'%';$('masterVolume').setAttribute('aria-valuetext',volume+'%');if(audio&&masterGain)setMasterVolume(audio,masterGain,volume);if(volume===0)stopPreview();syncAlertSound();}
 function unlockAudio() {
   if(!$('sound').checked) return;
-  try { ensureAudio(); void audio.resume().catch(()=>{}); } catch { notify('Audio is unavailable in this browser. Visual alerts still work.'); }
+  try { ensureAudio(); void audio.resume().then(syncAlertSound).catch(()=>{}); } catch { notify('Audio is unavailable in this browser. Visual alerts still work.'); }
 }
 function beep(now,event,preview=false) {
   const pattern=$('sound-'+event).value;
-  if(!audio||!masterGain||!canPlay({state:audio.state,enabled:$('sound').checked,preview,pattern,now,last:soundTimes[event]??-Infinity,volume:Number($('masterVolume').value)}))return;
-  synthesize(audio,masterGain,pattern);soundTimes[event]=now;
+  if(!preview||!audio||!masterGain||!canPlay({state:audio.state,enabled:false,preview:true,pattern,now,volume:Number($('masterVolume').value)}))return;
+  alertPlayer?.stop();stopPreview();previewPlayback=synthesize(audio,masterGain,pattern);
+  previewTimer=setTimeout(()=>{previewPlayback=null;previewTimer=null;syncAlertSound();},previewPlayback.duration*1000);
 }
 async function loadExpression() {
   if(cnn||cnnLoading||!$('expression').checked)return;
@@ -129,6 +138,7 @@ function requestExpression(now,data) {
 }
 function stop(reason='Session stopped. Camera released.') {
   showSummary(reason);
+  activeSound=null;alertPlayer?.stop();stopPreview();
   clearRetry();
   ++generation; running=false; loading=false; cancelAnimationFrame(raf);
   if(stream) for(const track of stream.getTracks()) track.stop();
@@ -167,7 +177,7 @@ async function start() {
     if(token!==generation) return;
     monitor=new Monitor(monitor.config); calibration=new Calibration();
     $('calibrationTag').textContent='NOT CALIBRATED'; $('calibrationInfo').textContent='Face forward, then press Calibrate. No calibration has been applied to this session.';
-    running=true;loading=false;gazeBaseline=null;gazeSamples=[];fusion.reset();expressionCue=null;lastExpression=-Infinity;Object.keys(soundTimes).forEach(k=>delete soundTimes[k]);void loadExpression(); stalled=false; previousVideo=-1; lastProcessAt=0; fps=0; previousFpsAt=0; lastBeep=-Infinity; lastFrameAt=performance.now();
+    running=true;loading=false;gazeBaseline=null;gazeSamples=[];fusion.reset();expressionCue=null;lastExpression=-Infinity;void loadExpression(); stalled=false; previousVideo=-1; lastProcessAt=0; fps=0; previousFpsAt=0; lastBeep=-Infinity; lastFrameAt=performance.now();
     session=new SessionSummary(performance.now());lastSummary=null;processingMs=null;
     $('sessionSummary').hidden=true;$('saveReport').disabled=true;
     $('start').textContent='Camera running'; $('calibrate').disabled=false; $('placeholder').hidden=true; $('liveBadge').hidden=false; $('cameraState').textContent='LIVE · '+runtimeLabel;
@@ -245,7 +255,7 @@ function loop(time) {
       previousFpsAt=performance.now();
       draw(data); render(now,values||data,state,light);
       if(!healthy)status(currentHealth,'Monitoring needs a clear view',currentHealth==='FACE NOT DETECTED'?'No reliable face. Absence and full obstruction cannot be distinguished.':'Image or framing quality is unreliable; obstruction is possible.');
-      if(fused.sound)beep(now,fused.sound);
+      updateAlertSound(fused.sound);
       processingMs=performance.now()-frameStarted;
       $('livePerformance').textContent=`Performance: ${fps.toFixed(1)} FPS · ${processingMs.toFixed(1)} ms/frame`;
       const reportAlerts=[...fused.alerts,...(fused.sound==='availability'?['Monitoring unavailable']:[])];
@@ -254,7 +264,7 @@ function loop(time) {
     } else if(time-lastFrameAt>1500 && !stalled) {
       session?.countAlerts(['Camera stream stale']);
       $('livePerformance').textContent='Performance: unavailable · stale frames';
-      stalled=true;monitor.reset();calibration.cancel();fusion.reset();expressionCue=null;observationEpoch++;$('gazeValue').textContent='Unavailable';$('expressionValue').textContent='Unavailable';$('expressionScore').textContent='Stale observation';$('fusion').textContent='Camera view unavailable · stale frames';beep(time/1000,'availability');draw(null);clearMetrics();status('STALE','Camera data is stale','Previous readings are invalid. Stop and restart the camera.');$('alerts').textContent='Alert assessment unavailable; waiting for fresh frames.';
+      stalled=true;monitor.reset();calibration.cancel();fusion.reset();expressionCue=null;observationEpoch++;$('gazeValue').textContent='Unavailable';$('expressionValue').textContent='Unavailable';$('expressionScore').textContent='Stale observation';$('fusion').textContent='Camera view unavailable · stale frames';updateAlertSound('availability');draw(null);clearMetrics();status('STALE','Camera data is stale','Previous readings are invalid. Stop and restart the camera.');$('alerts').textContent='Alert assessment unavailable; waiting for fresh frames.';
     }
     raf=requestAnimationFrame(loop);
   } catch(error) {stop('Processing stopped. Camera released.');showRetry(error,'camera');}
@@ -262,11 +272,11 @@ function loop(time) {
 function syncSettings() {for(const [key] of fields) $('setting-'+key).value=monitor.config[key];}
 $('start').addEventListener('click',start);
 $('stop').addEventListener('click',()=>{stop();notify('Session ended. Camera released.');});
-$('calibrate').addEventListener('click',()=>{if(!running)return;calibration.begin(performance.now()/1000);gazeSamples=[];fusion.reset();expressionCue=null;observationEpoch++;monitor.reset();$('calibrationTag').textContent='CALIBRATING';notify('For five seconds, face forward with eyes open and mouth closed.');});
-$('settings').addEventListener('submit',event=>{event.preventDefault();try{const config=Object.fromEntries(fields.map(([key])=>[key,Number($('setting-'+key).value)]));monitor.config=validateSettings(config);monitor.reset();fusion.reset();notify('Thresholds applied. Alert timers reset.');persistPreferences();}catch(error){notify(error.message,true);}});
+$('calibrate').addEventListener('click',()=>{if(!running)return;updateAlertSound(null);stopPreview();calibration.begin(performance.now()/1000);gazeSamples=[];fusion.reset();expressionCue=null;observationEpoch++;monitor.reset();$('calibrationTag').textContent='CALIBRATING';notify('For five seconds, face forward with eyes open and mouth closed.');});
+$('settings').addEventListener('submit',event=>{event.preventDefault();try{const config=Object.fromEntries(fields.map(([key])=>[key,Number($('setting-'+key).value)]));monitor.config=validateSettings(config);monitor.reset();fusion.reset();updateAlertSound(null);notify('Thresholds applied. Alert timers reset.');persistPreferences();}catch(error){notify(error.message,true);}});
 $('mirror').addEventListener('change',()=> $('viewport').classList.toggle('mirrored',$('mirror').checked));
 $('debug').addEventListener('change',()=>{$('debugPanel').hidden=!$('debug').checked;$('debugPanel').open=$('debug').checked;});
-$('sound').addEventListener('change',()=>{unlockAudio();persistPreferences();});
+$('sound').addEventListener('change',()=>{unlockAudio();syncAlertSound();persistPreferences();});
 $('camera').addEventListener('change',()=>{if(running||loading)stop('Camera changed. Start a new session.');});
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&(running||loading)){stop('Stopped because this tab was hidden.');notify('Monitoring stopped when the tab was hidden. Start again when ready.');}});
 window.addEventListener('pagehide',()=>stop());
@@ -281,10 +291,11 @@ document.addEventListener('fullscreenchange',()=>{$('fullscreen').textContent=do
 for(const button of document.querySelectorAll('[data-preview]'))button.addEventListener('click',async()=>{try{ensureAudio();await audio.resume();beep(performance.now()/1000,button.dataset.preview,true);}catch{notify('Audio unavailable. Visual alerts remain active.');}});
 
 $('endSession').addEventListener('click',()=>{stop();notify('Session ended. Camera released.');});
-for(const event of ['distraction','fatigue','availability'])$('sound-'+event).addEventListener('change',persistPreferences);
+for(const event of ['distraction','fatigue','availability'])$('sound-'+event).addEventListener('change',()=>{stopPreview();syncAlertSound();persistPreferences();});
 $('masterVolume').addEventListener('input',updateVolume);
 $('masterVolume').addEventListener('change',persistPreferences);
 $('resetSettings').addEventListener('click',()=>{
+  updateAlertSound(null);stopPreview();
   applyPreferences(defaultPreferences());monitor.reset();fusion.reset();calibration=new Calibration();
   gazeBaseline=null;gazeSamples=[];expressionCue=null;observationEpoch++;
   $('calibrationTag').textContent='NOT CALIBRATED';$('calibrationInfo').textContent='Defaults restored. Calibrate again for this session.';
