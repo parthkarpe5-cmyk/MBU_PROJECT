@@ -2,7 +2,39 @@
 
 Capstone upgrade: FER+ CNN inference via local ONNX Runtime WASM, calibrated iris gaze independent of pose, time-aligned expression context, conservative visibility checks, three assignable alert patterns, and a light Neumorphic dashboard with camera/dashboard/split/fullscreen views. See [the audit](../CAPSTONE_AUDIT.md).
 
-A Vite website that uses MediaPipe Face Landmarker in the browser. No Python server, Docker, API key, database, camera upload, or recording is required. Webcam access starts after the user clicks Start and grants browser permission. Stop, a hidden tab, page exit, or a processing error releases the camera. Settings and calibration live in memory only.
+A Vite website that uses MediaPipe Face Landmarker in the browser. No Python server, Docker, API key, database, camera upload, or recording is required. Webcam access starts after the user clicks Start and grants browser permission. Stop, a hidden tab, page exit, or a processing error releases the camera. Thresholds, sound assignments/mute, view and split size are saved in local browser storage. Calibration pose/gaze baselines remain session-only. Reset to defaults removes this app's saved preferences and invalidates calibration; blocked storage falls back to session-only controls.
+
+## Session summary and local reports
+
+Stopping an active session shows duration, sustained alert event counts by type,
+brief observed blink count, mouth-open/yawn-proxy count, average/minimum processing
+FPS, and average synchronous processing time. Counts increase once per new alert
+episode, including monitoring-unavailable/stale events, rather than per frame or
+repeated sound. Blink counts cover observed 60–450 ms closures; tracking gaps and
+calibration break continuity. These are descriptive counters, not validated event
+labels. Failed camera startup does not create a session report.
+
+The small live readout shows processing FPS and synchronous milliseconds per
+processed frame. Summary average FPS is the number of positive inter-frame
+intervals divided by their total elapsed time; minimum FPS is the lowest reciprocal
+interval. With fewer than two processed frames these values are unavailable.
+Processing ms covers synchronous face analysis, expression-input preparation,
+overlays and UI updates. It excludes asynchronous expression inference, camera
+buffering and display latency. These figures are not end-to-end latency or a
+hardware benchmark.
+
+Select JSON or CSV and click **Save report** after stopping. This generates a
+browser download containing aggregate statistics and session start/end times.
+Export makes no network requests and does not upload anything. No frame data,
+landmarks, expression history, or video is saved. Reports stay in memory until a
+new session or page reload and are never automatically persisted. Normal page
+and model loading still fetches the existing application assets.
+
+The **About / Limitations** panel describes this research prototype and its
+unvalidated recognition across people. Expression context never triggers an
+alert alone. Camera-denied, absent-camera and model-load errors show actionable
+messages and **Retry**. An expression-model load failure keeps the camera and
+geometry monitoring active; retry reloads that model without restarting the camera.
 
 ## Run locally
 

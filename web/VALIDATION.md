@@ -1,3 +1,27 @@
+# Session summaries, preferences and recovery — 5 November 2026
+
+- 21 Node unit tests passed, including summary duration, event-onset counting,
+  observed blinks and gaps, yawn-proxy totals, FPS/processing aggregates, empty
+  sessions, idempotent stop, JSON/CSV serialization, preference persistence/reset,
+  corrupt/blocked storage, and friendly camera/model errors.
+- All 12 Playwright tests passed using headless Edge and simulated/canvas camera
+  input. The existing 5 tests remain passing. New tests cover live timing,
+  stop summary and released tracks, no automatic downloads, JSON/CSV content,
+  no HTTP requests during export, no report persistence, preferences across
+  reload/reset, storage denial, About text, narrow layout, denied/absent camera
+  recovery, failed face-model startup without camera access, and expression-model
+  Retry while preserving the active camera stream.
+- Root production build passed. Python regression suite: 62 passed, 1 skipped.
+- The focused report test also passed with desktop and 390px screenshots; both
+  were visually inspected. Summary values, alert counts, format selector and
+  download button fit without horizontal overflow.
+- Reports are aggregate local downloads only. These tests do not establish
+  recognition accuracy, sound audibility, physical webcam behavior, sustained
+  performance across hardware or remote Vercel behavior. Live ms excludes async
+  expression inference and camera/display latency. No human webcam was opened.
+
+---
+
 # DriveGuard AI browser validation — 2 November 2026
 
 - **13 unit tests passed**: geometry/timers plus iris gaze, conservative visibility statuses, fusion timing and priority, freshness, CNN score decoding, and expression-only alarm suppression.

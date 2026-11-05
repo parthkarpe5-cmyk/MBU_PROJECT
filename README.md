@@ -14,6 +14,11 @@ For Vercel, keep **Root Directory `./`**, **Preset Vite**, **Build `npm run buil
 
 See [browser setup and deployment](web/README.md) and [browser validation](web/VALIDATION.md). The browser includes the eight-class FER+ expression CNN. A trained driver-behavior model remains unavailable in the browser; the optional Python research bundle is separate.
 
+The browser also shows an end-of-session summary, offers click-only local JSON/CSV
+reports, and displays live processing timing. Thresholds, sound preferences and
+workspace view persist locally with a reset control. See the browser guide for
+measurement definitions, privacy behavior, About/Limitations and Retry controls.
+
 The Python application and research pipeline below remain available separately.
 
 ---
