@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { readFileSync } from 'node:fs';
+import {useCanvasCamera} from './camera.js';
 
 test('loads without webcam permission and adapts to a mobile viewport',async({page})=>{
   let cameraCalls=0;
@@ -24,11 +25,14 @@ test('permission denial gives an actionable error and allows retry',async({page}
 });
 
 test('real MediaPipe loads; fake webcam stops and restarts without leaking tracks',async({page})=>{
+  await useCanvasCamera(page);
   const errors=[];
   page.on('pageerror',e=>errors.push(e.message));
   await page.goto('/');await page.locator('#start').click();
   await expect(page.locator('#cameraState')).toContainText('LIVE',{timeout:60000});
-  await expect(page.locator('#status')).toHaveText('FACE NOT DETECTED',{timeout:30000}); // fake camera has no face
+  // The synthetic feed can be normally exposed or too flat/dark, depending on its frame.
+  await expect(page.locator('#status')).toHaveText(/^(FACE NOT DETECTED|CAMERA VIEW UNAVAILABLE)$/,{timeout:30000});
+  await expect(page.locator('#earValue')).toHaveText('—');
   await expect(page.locator('#message')).not.toHaveClass(/error/);
   await page.evaluate(()=>{window.testTracks=[...document.querySelector('#video').srcObject.getTracks()];});
   await page.locator('#stop').click();

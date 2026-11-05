@@ -36,6 +36,28 @@ alert alone. Camera-denied, absent-camera and model-load errors show actionable
 messages and **Retry**. An expression-model load failure keeps the camera and
 geometry monitoring active; retry reloads that model without restarting the camera.
 
+## Synthesized alert sounds
+
+All sounds use the Web Audio API, with no audio files or network requests:
+
+- Fatigue: two sine pulses, each falling linearly 440 to 330 Hz over 0.35 s,
+  separated by 0.15 s of silence.
+- Distraction: two consecutive triangle notes, each rising linearly 660 to
+  880 Hz over 0.15 s.
+- Monitoring unavailable: one quieter 520 Hz sine tone lasting 0.4 s.
+
+Each note has 15 ms fade-in and fade-out. The master volume slider defaults to
+50%; its maximum linear master gain is capped at 0.12. The unavailable tone uses
+35% of the other patterns' envelope level. These are synthesis settings, not
+measured acoustic levels; device and system volume still determine loudness.
+Volume persists with the other local preferences and resets to 50%.
+
+Mappings show friendly option names while keeping existing saved choices. The
+three-second per-event cooldown, per-event Mute, and global Sound toggle remain.
+Previews bypass global Sound and cooldown, but respect a muted mapping and master
+volume. Oscillators and envelope nodes disconnect after playback. Physical speaker
+audibility has not been tested; no alarm-standard compliance is claimed.
+
 ## Run locally
 
 Use Node 24.x (the root package pins this major version for Vercel). From the repository root:

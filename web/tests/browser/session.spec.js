@@ -1,7 +1,9 @@
 import {test,expect} from '@playwright/test';
 import {readFile} from 'node:fs/promises';
+import {useCanvasCamera} from './camera.js';
 
 test('stop shows aggregate summary, performance clears, and JSON/CSV download only on click',async({page},testInfo)=>{
+  await useCanvasCamera(page);
   const downloads=[];page.on('download',download=>downloads.push(download));
   await page.goto('/');await expect(page.locator('#sessionSummary')).toBeHidden();
   await page.locator('#expression').uncheck();await page.locator('#start').click();
@@ -71,10 +73,7 @@ test('blocked storage still allows controls, and About states all limits on a na
 
 for(const [name,message] of [['NotAllowedError','Camera permission was denied'],['NotFoundError','No webcam was found']]){
   test(`${name} has a Retry that starts a fresh session`,async({page})=>{
-    await page.addInitScript(name=>{
-      const original=navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);let first=true;
-      navigator.mediaDevices.getUserMedia=(...args)=>{if(first){first=false;return Promise.reject(new DOMException('test failure',name));}return original(...args);};
-    },name);
+    await useCanvasCamera(page,name);
     await page.goto('/');await page.locator('#expression').uncheck();await page.locator('#start').click();
     await expect(page.locator('#message')).toContainText(message,{timeout:60000});
     await expect(page.locator('#retry')).toBeVisible();
@@ -86,10 +85,7 @@ for(const [name,message] of [['NotAllowedError','Camera permission was denied'],
 }
 
 test('face-model load failure has friendly Retry and does not request the camera',async({page})=>{
-  await page.addInitScript(()=>{
-    window.cameraCalls=0;const original=navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
-    navigator.mediaDevices.getUserMedia=(...args)=>{window.cameraCalls++;return original(...args);};
-  });
+  await useCanvasCamera(page);
   await page.route('**/models/face_landmarker.task',route=>route.abort());
   await page.goto('/');await page.locator('#expression').uncheck();await page.locator('#start').click();
   await expect(page.locator('#message')).toContainText('face model could not load',{timeout:60000});
@@ -99,6 +95,7 @@ test('face-model load failure has friendly Retry and does not request the camera
 });
 
 test('expression-model Retry recovers while the existing camera stream stays active',async({page})=>{
+  await useCanvasCamera(page);
   await page.route('**/models/emotion-ferplus-8.onnx',route=>route.abort());
   await page.goto('/');await page.locator('#start').click();
   await expect(page.locator('#cameraState')).toContainText('LIVE',{timeout:60000});

@@ -50,4 +50,4 @@ export class Fusion {
         (stable?` · Expression context: ${exp.label} (uncalibrated)`:'')};
   }
 }
-export const PATTERNS={distraction:[660,880],fatigue:[1040,780,1040],availability:[440,330]};
+export {PATTERNS} from './sounds.js';

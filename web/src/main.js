@@ -6,6 +6,7 @@ import {ExpressionCNN} from './expression.js';
 import {SessionSummary, serializeReport} from './session.js';
 import {defaultPreferences, loadPreferences, savePreferences, resetPreferences} from './preferences.js';
 import {friendlyError} from './errors.js';
+import {createMasterGain,setMasterVolume,canPlay,synthesize} from './sounds.js';
 
 const fields = [['ear','EAR below',.01],['mar','MAR above',.01],['eyeSeconds','Eye closure · seconds',.1],['mouthSeconds','Mouth opening · seconds',.1],['poseSeconds','Head away · seconds',.1],['yaw','Yaw limit · degrees',1],['pitch','Pitch limit · degrees',1]];
 const switches = [['mesh','Face mesh',false],['landmarks','Eye & mouth points',true],['iris','Iris',true],['lines','Measurement lines',true],['axes','Pose axes',true],['ids','Point IDs',false],['mirror','Mirror preview',true],['sound','Sound',false],['debug','Debug',false],['expression','Emotion CNN',true]];
@@ -36,7 +37,7 @@ document.querySelector('#app').innerHTML=`
     <dl id="summaryValues" class="summary-values"></dl><p id="summaryAlerts" class="explanation"></p>
     <p class="explanation">Alert counts are separate sustained events, not sound repeats. Blinks are brief observed closures (60–450 ms); mouth-open events are yawn proxies. Processing time excludes asynchronous expression inference and camera/display latency. Reports contain aggregate numbers only and are saved only when you click Save report.</p>
   </section>
-  <details class="panel settings"><summary>Alert sounds & previews</summary><div class="soundgrid">${['distraction','fatigue','availability'].map(event=>`<div class="soundrow"><label for="sound-${event}">${event==='availability'?'Monitoring unavailable':event==='fatigue'?'Fatigue cues':'Distraction cues'}</label><select id="sound-${event}">${Object.keys(PATTERNS).map(name=>`<option ${name===event?'selected':''}>${name}</option>`).join('')}<option>Mute</option></select><button data-preview="${event}">Preview</button></div>`).join('')}<p>Enable Sound for alerts. Availability sounds after 2 seconds. Events repeat at most every 3 seconds.</p></div></details>
+  <details class="panel settings"><summary>Alert sounds & previews</summary><div class="soundgrid">${['distraction','fatigue','availability'].map(event=>`<div class="soundrow"><label for="sound-${event}">${event==='availability'?'Monitoring unavailable':event==='fatigue'?'Fatigue cues':'Distraction cues'}</label><select id="sound-${event}">${Object.entries(PATTERNS).map(([key,pattern])=>`<option value="${key}" ${key===event?'selected':''}>${pattern.label}</option>`).join('')}<option value="Mute">Mute</option></select><button data-preview="${event}">Preview</button></div>`).join('')}<label class="volume-control" for="masterVolume">Master volume <input id="masterVolume" type="range" min="0" max="100" step="1" value="50"><output id="volumeValue" for="masterVolume">50%</output></label><p>Volume is limited in the app; loudness still depends on your device. Enable Sound for alerts. Previews play the selected tone even when Sound is off; Mute and zero volume remain silent. Availability sounds after 2 seconds. Events repeat at most every 3 seconds.</p></div></details>
   <details class="panel settings"><summary>Thresholds & timing</summary><form id="settings" class="settingsinner">${fields.map(([key,label,step])=>`<div class="field"><label for="setting-${key}">${label}</label><input id="setting-${key}" name="${key}" type="number" min="${step}" step="${step}" value="${DEFAULTS[key]}" required></div>`).join('')}<div class="settingsfooter"><button type="submit">Apply settings</button><button id="resetSettings" type="button">Reset to defaults</button><p>Preferences stay in this browser. Calibration baselines and session reports are not automatically saved.</p></div></form></details>
   <details class="panel settings" id="debugPanel" hidden><summary>Why did the monitor report this?</summary><pre id="debugText" class="debug">No observations.</pre></details>
   <details class="panel settings" id="about"><summary>About / Limitations</summary><div class="explanation">DriveGuard AI is a research prototype, not a safety or automotive system. Frames are processed locally; no video is recorded or uploaded. Facial expressions are context only and never trigger an alert alone. Accuracy has not been validated across people. Measurements and alert counts describe observed cues, not diagnoses. Preferences are stored in this browser; aggregate reports are saved only when requested.</div></details>
@@ -54,6 +55,7 @@ let gazeBaseline=null,gazeSamples=[],currentGaze=null,currentHealth='MONITORING'
 const soundTimes={};
 let stream=null, detector=null, running=false, loading=false, generation=0, raf=0;
 let previousVideo=-1, lastFrameAt=0, lastProcessAt=0, previousFpsAt=0, lastBeep=-Infinity, fps=0, audio=null, stalled=false;
+let masterGain=null;
 let runtimeLabel='';
 let retryKind=null;
 function clearRetry(){retryKind=null;$('retry').hidden=true;}
@@ -64,12 +66,13 @@ const numberText = value => value === null ? 'Not available' : value.toFixed(1);
 let preferenceStorage=null;try{preferenceStorage=window.localStorage;}catch{/* Session remains usable. */}
 function preferencesFromControls(){return {version:1,thresholds:{...monitor.config},
   sounds:Object.fromEntries(['distraction','fatigue','availability'].map(event=>[event,$('sound-'+event).value])),
-  soundEnabled:$('sound').checked,view:document.querySelector('.layout').dataset.view,splitSize:Number($('splitSize').value)};}
+  soundEnabled:$('sound').checked,masterVolume:Number($('masterVolume').value),view:document.querySelector('.layout').dataset.view,splitSize:Number($('splitSize').value)};}
 function persistPreferences(){if(!savePreferences(preferenceStorage,preferencesFromControls()))notify('Preferences could not be saved in this browser. They still apply to this session.');}
 function applyPreferences(preferences){
   monitor.config={...preferences.thresholds};syncSettings();
   for(const [event,choice] of Object.entries(preferences.sounds))$('sound-'+event).value=choice;
   $('sound').checked=preferences.soundEnabled;
+  $('masterVolume').value=String(preferences.masterVolume);updateVolume();
   document.querySelector('.layout').dataset.view=preferences.view;
   document.querySelectorAll('button[data-view]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.view===preferences.view)));
   $('splitSize').value=String(preferences.splitSize);$('splitSize').disabled=preferences.view!=='split';
@@ -100,14 +103,16 @@ async function cameras() {
     if(devices.some(d=>d.deviceId===selected)) $('camera').value=selected;
   } catch { /* Enumeration is optional; default camera can still work. */ }
 }
+function ensureAudio(){audio??=new(window.AudioContext||window.webkitAudioContext)();masterGain??=createMasterGain(audio,Number($('masterVolume').value));}
+function updateVolume(){const volume=Number($('masterVolume').value);$('volumeValue').textContent=volume+'%';$('masterVolume').setAttribute('aria-valuetext',volume+'%');if(audio&&masterGain)setMasterVolume(audio,masterGain,volume);}
 function unlockAudio() {
   if(!$('sound').checked) return;
-  try { audio??=new (window.AudioContext||window.webkitAudioContext)(); void audio.resume().catch(()=>{}); } catch { notify('Audio is unavailable in this browser. Visual alerts still work.'); }
+  try { ensureAudio(); void audio.resume().catch(()=>{}); } catch { notify('Audio is unavailable in this browser. Visual alerts still work.'); }
 }
 function beep(now,event,preview=false) {
-  const pattern=PATTERNS[$('sound-'+event).value];
-  if(!pattern||!audio||audio.state!=='running'||(!preview&&(!$('sound').checked||now-(soundTimes[event]??-Infinity)<3)))return;
-  pattern.forEach((frequency,i)=>{const o=audio.createOscillator(),g=audio.createGain(),at=audio.currentTime+i*.23;o.frequency.value=frequency;g.gain.setValueAtTime(0,at);g.gain.linearRampToValueAtTime(.08,at+.01);g.gain.linearRampToValueAtTime(0,at+.15);o.connect(g);g.connect(audio.destination);o.start(at);o.stop(at+.16);});soundTimes[event]=now;
+  const pattern=$('sound-'+event).value;
+  if(!audio||!masterGain||!canPlay({state:audio.state,enabled:$('sound').checked,preview,pattern,now,last:soundTimes[event]??-Infinity,volume:Number($('masterVolume').value)}))return;
+  synthesize(audio,masterGain,pattern);soundTimes[event]=now;
 }
 async function loadExpression() {
   if(cnn||cnnLoading||!$('expression').checked)return;
@@ -273,10 +278,12 @@ $('splitSize').addEventListener('input',()=>document.querySelector('.layout').st
 $('splitSize').addEventListener('change',persistPreferences);
 $('fullscreen').addEventListener('click',async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen();}catch{notify('Fullscreen unavailable in this browser.');}});
 document.addEventListener('fullscreenchange',()=>{$('fullscreen').textContent=document.fullscreenElement?'Exit fullscreen':'Fullscreen';});
-for(const button of document.querySelectorAll('[data-preview]'))button.addEventListener('click',async()=>{try{audio??=new(window.AudioContext||window.webkitAudioContext)();await audio.resume();beep(performance.now()/1000,button.dataset.preview,true);}catch{notify('Audio unavailable. Visual alerts remain active.');}});
+for(const button of document.querySelectorAll('[data-preview]'))button.addEventListener('click',async()=>{try{ensureAudio();await audio.resume();beep(performance.now()/1000,button.dataset.preview,true);}catch{notify('Audio unavailable. Visual alerts remain active.');}});
 
 $('endSession').addEventListener('click',()=>{stop();notify('Session ended. Camera released.');});
 for(const event of ['distraction','fatigue','availability'])$('sound-'+event).addEventListener('change',persistPreferences);
+$('masterVolume').addEventListener('input',updateVolume);
+$('masterVolume').addEventListener('change',persistPreferences);
 $('resetSettings').addEventListener('click',()=>{
   applyPreferences(defaultPreferences());monitor.reset();fusion.reset();calibration=new Calibration();
   gazeBaseline=null;gazeSamples=[];expressionCue=null;observationEpoch++;

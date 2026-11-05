@@ -1,10 +1,11 @@
 import {DEFAULTS, validateSettings} from './core.js';
 import {PATTERNS} from './multimodal.js';
+import {DEFAULT_VOLUME,clampVolume} from './sounds.js';
 
 export const SETTINGS_KEY='driveguard.settings.v1';
 export const defaultPreferences=()=>({version:1,thresholds:{...DEFAULTS},
   sounds:{distraction:'distraction',fatigue:'fatigue',availability:'availability'},
-  soundEnabled:false,view:'split',splitSize:60});
+  soundEnabled:false,masterVolume:DEFAULT_VOLUME,view:'split',splitSize:60});
 
 export function validatePreferences(value) {
   const defaults=defaultPreferences();
@@ -16,6 +17,7 @@ export function validatePreferences(value) {
     if(Object.hasOwn(PATTERNS,choice)||choice==='Mute')defaults.sounds[event]=choice;
   }
   if(typeof value.soundEnabled==='boolean')defaults.soundEnabled=value.soundEnabled;
+  if(Number.isFinite(value.masterVolume))defaults.masterVolume=clampVolume(value.masterVolume);
   if(['split','camera','dashboard'].includes(value.view))defaults.view=value.view;
   if(Number.isFinite(value.splitSize)&&value.splitSize>=35&&value.splitSize<=70)defaults.splitSize=value.splitSize;
   return defaults;

@@ -1,3 +1,20 @@
+# Synthesized sound redesign — 5 November 2026
+
+- 26 Node tests passed, including exact oscillator waveforms, frequency ramps,
+  pulse durations/gaps, 15 ms gain fades, node cleanup, capped master gain,
+  zero volume, three-second cooldown, mute/preview rules and preference migration.
+- All 13 browser tests passed in headless Edge. The new sound test schedules real
+  Web Audio oscillators for all three previews, checks friendly option names,
+  per-event mute and zero-volume suppression, volume persistence/reset, and no
+  network requests during synthesis. Production build passed.
+- Camera lifecycle/retry tests now use deterministic canvas streams because Edge's
+  synthetic hardware camera intermittently disappeared on restart. Actual
+  MediaPipe/FER+ loading and track-stop assertions remain in place.
+- Speaker audibility and device-dependent loudness were not tested. No audio files,
+  recordings, uploads or alarm-standard compliance claims were added.
+
+---
+
 # Session summaries, preferences and recovery — 5 November 2026
 
 - 21 Node unit tests passed, including summary duration, event-onset counting,
